@@ -64,3 +64,8 @@ surv.lrn$par.vals
 
 # training
 mod = train(surv.lrn, surv.task)
+mod
+
+# predicting
+task.pred = predict(mod, task = surv.task)
+task.pred
