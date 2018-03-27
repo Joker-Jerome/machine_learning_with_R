@@ -1,0 +1,84 @@
+---
+title: "BST-644: Final Project"
+author: "Yian Lin"
+date: "3/10/2018"
+output: 
+  html_document:
+    theme: cosmo
+  pdf_document: default
+---
+### Problem 1
+#####(a) Load the data
+```{r 1.a}
+load("nhanes2003-2004.Rda")
+d <- nhanes2003_2004
+# Remove the observations with missing RIDAGEEX
+d1 <- d[!(is.na(d$RIDAGEEX)), ]
+```
+
+We obtain the dataset and remove the observations with missing RIDAGEEX (outcome of interest).
+
+#####(b) Missingness
+```{r 1.b}
+# Remove the variables with >10% missing values
+miss <- rep(NA, ncol(d1))
+for (i in 1:ncol(d1)) {
+  miss[i] <- sum(is.na(d1[, i]))
+}
+missless10 <- miss < nrow(d1) * 0.1
+d1 <- d1[, missless10]
+# Remove the variables with less to none prediction function
+cnames <- colnames(d1)
+d1 <- d1[, is.na(match(cnames, c("SEQN", "SDDSRVYR", "RIDSTATR", 
+                                "RIDAGEYR", "RIDRETH2", "WTINT2YR",
+                                "WTMEC2YR", "SDMVPSU", "SDMVSTRA",
+                                "WTDRD1", "DRDINT")))]
+# Plot the missing patterns of the samples
+missv <- rep(NA, nrow(d1))
+for (i in 1:nrow(d1)) {
+  missv[i] <- sum(is.na(d1[i, ]))
+}
+library(ggplot2)
+qplot(missv, geom = "histogram")
+library(Amelia)
+library(mlbench)
+missmap(d1[missv > 0, 1:50], 
+        col = c("black", "grey"), legend = FALSE)
+# Get a set of complete data
+d11 <- d1[complete.cases(d1), ]
+# nlevels
+levels_vec <- sapply(d11,nlevels)
+# Convert the data type
+for (i in 1:ncol(d11)) {
+  if (levels_vec[i] > 15) {
+    d11[, i] <- scale(as.numeric(d11[, i]))
+  }
+}
+```
+
+We remove the variables with >10% missing values as well as variables with less to none prediction function (respondent sequence number, data release number, interview/examination status, age at screening in years (since we have information in months), linked NH3 race (since we have information in race), full sample 2 year interview weight, full sample 2 year MEC exam weight, masked variance pseudo-psu, masked variance pseudo-stratum, dietary day one sample weight, and the variable indicating whether the sample person has intake data for one or two days), and plot out a histogram of number of missing variable values, as well as the patterns of missingness of the remaining first 50 variables for all observations.  From the histogram, we can see that the majority (6880) of the observations now have complete information for each variable, which are the ones we are going to use to build the prediction model.
+
+#####(c) Ridge regression
+```{r 1.c}
+grid <- 10^seq(10, -2, length = 100)
+# Cross validation
+set.seed(2)
+total.mat <- model.matrix(RIDAGEEX ~ ., data = d11)
+cv.ridge <- cv.glmnet(total.mat, d11$RIDAGEEX,
+                      alpha = 0, lambda = grid, thresh = 1e-12)
+plot(cv.ridge)
+olambda <- cv.ridge$lambda.min
+olambda
+# Min of the CV MSE
+min(cv.ridge$cvm)
+# Refit Ridge
+fit.ridge <- glmnet(total.mat, d11$RIDAGEEX,
+                    alpha = 0, lambda = grid, thresh = 1e-12)
+predict(fit.ridge, s = olambda, type = "coefficients")
+```
+
+Using Ridge regression, with the optimal $\lambda$ being `r olambda`, the 10-fold cross-validated MSE is `r min(cv.ridge$cvm)`.
+
+#####(c) Ridge regression
+
+### Problem 2
